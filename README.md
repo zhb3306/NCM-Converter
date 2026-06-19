@@ -21,7 +21,7 @@
 
 | 组件 | 用途 | 许可证 |
 |------|------|--------|
-| [libncmdump](https://github.com/taurusxin/ncmdump) | 核心解密引擎 | GPL-3.0 |
+| [libncmdump](https://github.com/taurusxin/ncmdump) | 核心解密引擎 | MIT |
 | [FFmpeg](https://ffmpeg.org/) | MP3 编码转换 | LGPL-2.1+ |
 | [Qt 5.15.2](https://www.qt.io/) | GUI 框架及工具链 | LGPL-3.0 / GPL-3.0 |
 
