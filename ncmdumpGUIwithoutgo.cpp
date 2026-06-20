@@ -1,4 +1,21 @@
-﻿#include "ncmdumpGUIwithoutgo.h"
+﻿/*
+ * NCM Converter - A GUI tool.
+ * Copyright (C) 2026 ZHB3306
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+#include "ncmdumpGUIwithoutgo.h"
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QDateTime>
@@ -522,30 +539,77 @@ void ncmdumpGUIwithoutgo::onAbout()
     QDialog aboutDialog(this);
     aboutDialog.setWindowTitle("关于 “NCM Converter”");
     aboutDialog.setWindowFlags(aboutDialog.windowFlags() & ~Qt::WindowContextHelpButtonHint);
-    aboutDialog.setFixedSize(600, 400);
+    aboutDialog.setFixedSize(520, 700);
+
     QVBoxLayout* mainLayout = new QVBoxLayout(&aboutDialog);
-    QHBoxLayout* topLayout = new QHBoxLayout;
+    mainLayout->setSpacing(8);
+
+    // ---- 左上角：图标 + 名称（水平排列） ----
+    QHBoxLayout* titleLayout = new QHBoxLayout;
+    titleLayout->setAlignment(Qt::AlignLeft);
+
     QLabel* iconLabel = new QLabel(&aboutDialog);
     QIcon icon(":/icons/NCMC.ico");
     if (!icon.isNull())
         iconLabel->setPixmap(icon.pixmap(64, 64));
     else
         iconLabel->setText("[图标]");
-    topLayout->addWidget(iconLabel);
-    QVBoxLayout* infoLayout = new QVBoxLayout;
+    titleLayout->addWidget(iconLabel);
+
     QLabel* titleLabel = new QLabel("NCM Converter", &aboutDialog);
     QFont titleFont = titleLabel->font();
-    titleFont.setPointSize(14);
+    titleFont.setPointSize(16);
     titleFont.setBold(true);
     titleLabel->setFont(titleFont);
-    infoLayout->addWidget(titleLabel);
-    QLabel* versionLabel = new QLabel("2.0-Beta5", &aboutDialog);
-    infoLayout->addWidget(versionLabel);
-    QLabel* licenseLabel = new QLabel("本软件遵循 GPL3.0 协议", &aboutDialog);
-    infoLayout->addWidget(licenseLabel);
-    topLayout->addLayout(infoLayout);
-    topLayout->addStretch();
-    mainLayout->addLayout(topLayout);
+    titleLayout->addWidget(titleLabel);
+
+    titleLayout->addStretch();
+    mainLayout->addLayout(titleLayout);
+
+    // ---- 版本、版权、作者等 ----
+    QLabel* versionLabel = new QLabel("1.0 - Release", &aboutDialog);
+    mainLayout->addWidget(versionLabel);
+
+    QLabel* copyrightLabel = new QLabel("Copyright (C) 2026 ZHB3306", &aboutDialog);
+    mainLayout->addWidget(copyrightLabel);
+
+    QLabel* authorLabel = new QLabel("作者: ZHB3306", &aboutDialog);
+    mainLayout->addWidget(authorLabel);
+
+    QLabel* licenseLabel = new QLabel("本软件遵循 GPL-3.0 协议", &aboutDialog);
+    mainLayout->addWidget(licenseLabel);
+
+    QLabel* linkLabel = new QLabel(
+        "<a href='https://github.com/zhb3306/ncmdump-GUI' style='color: #6b5b9b;'>GitHub 项目主页</a>",
+        &aboutDialog
+    );
+    linkLabel->setOpenExternalLinks(true);
+    mainLayout->addWidget(linkLabel);
+
+    QLabel* warrantyLabel = new QLabel("本软件按“现状”提供，不提供任何担保。", &aboutDialog);
+    mainLayout->addWidget(warrantyLabel);
+
+    // ---- 引用信息（可点击链接） ----
+    QLabel* refTitleLabel = new QLabel("引用项目：", &aboutDialog);
+    QFont refFont = refTitleLabel->font();
+    refFont.setBold(true);
+    refTitleLabel->setFont(refFont);
+    mainLayout->addWidget(refTitleLabel);
+
+    QLabel* refContentLabel = new QLabel(
+        "本软件使用了以下开源项目：<br>"
+        "• <a href='https://github.com/taurusxin/ncmdump' style='color: #6b5b9b;'>libncmdump</a>（MIT）<br>"
+        "• <a href='https://ffmpeg.org/' style='color: #6b5b9b;'>FFmpeg</a>（LGPL-2.1+）<br>"
+        "• <a href='https://www.qt.io/' style='color: #6b5b9b;'>Qt 框架</a>（LGPL-3.0 / GPL-3.0）<br>"
+        "感谢他们的付出！",
+        &aboutDialog
+    );
+    refContentLabel->setWordWrap(true);
+    refContentLabel->setOpenExternalLinks(true);
+    refContentLabel->setStyleSheet("color: #3a4c6c; font-size: 10pt;");
+    mainLayout->addWidget(refContentLabel);
+
+    // ---- GPL-3.0 协议全文 ----
     QTextEdit* textEdit = new QTextEdit(&aboutDialog);
     textEdit->setReadOnly(true);
     QFile file(":/gpl-3.0.txt");
@@ -559,5 +623,6 @@ void ncmdumpGUIwithoutgo::onAbout()
     }
     textEdit->setAlignment(Qt::AlignCenter);
     mainLayout->addWidget(textEdit);
+
     aboutDialog.exec();
 }
