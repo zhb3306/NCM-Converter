@@ -1,21 +1,4 @@
-﻿/*
- * NCM Converter - A GUI tool.
- * Copyright (C) 2026 ZHB3306
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
-#pragma once
+﻿#pragma once
 
 #include <QtWidgets/QMainWindow>
 #include <QListWidget>
@@ -31,6 +14,9 @@
 #include <QAction>
 #include <QProcess>
 #include <QQueue>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
 
 typedef void* (__cdecl* CreateCryptFunc)(const char*);
 typedef int(__cdecl* DumpFunc)(void*, const char*);
@@ -44,7 +30,13 @@ class ncmdumpGUIwithoutgo : public QMainWindow
 public:
     ncmdumpGUIwithoutgo(QWidget* parent = nullptr);
     ~ncmdumpGUIwithoutgo();
-    bool initialize();  
+    bool initialize();
+
+    void addFiles(const QStringList& files);
+
+protected:
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
 private slots:
     void onAddFiles();
@@ -59,6 +51,7 @@ private slots:
 
 private:
     void appendLog(const QString& msg);
+    void associateFileType();
     QString convertFile(const QString& ncmPath, const QString& outputDir);
     bool convertToMp3Async(const QString& inputFlac, const QString& outputMp3);
     void loadDllFunctions();
@@ -90,5 +83,5 @@ private:
     int totalFiles;
     int processedCount;
     bool keepFlacAfterMp3;
-    bool dllLoaded;         
+    bool dllLoaded;
 };

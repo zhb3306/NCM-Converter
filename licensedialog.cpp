@@ -36,7 +36,7 @@ LicenseDialog::LicenseDialog(QWidget* parent)
     setupUI();
     loadLicenseText();
 
-    infoLabel->setText("本软件遵循 GPL3.0 协议，为了保证不被违规分发，请仔细阅读并同意该许可协议。\n"
+    infoLabel->setText("本软件遵循 GPL-3.0 协议，为了保证不被违规分发，请仔细阅读并同意该许可协议。\n"
         "此外，本软件不需要联网，不会也无法收集用户信息，请放心使用。");
     btnAgree->setText("我同意");
     btnDisagree->setText("我不同意");
@@ -84,7 +84,6 @@ void LicenseDialog::loadLicenseText()
 
 void LicenseDialog::onAgree()
 {
-    // 自定义按钮文本为中文
     QMessageBox confirmBox(QMessageBox::Question, "许可 - GNU General Public License",
         "你确定吗？\n确定请单击“是”，否则请单击“否”",
         QMessageBox::NoButton, this);

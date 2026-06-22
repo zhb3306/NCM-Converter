@@ -35,6 +35,11 @@
 #include <QIcon>
 #include <QFile>
 #include <QTextStream>
+#include <QSettings>
+#include <QRadioButton>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
 #include <windows.h>
 #include <eh.h>
 
@@ -64,6 +69,8 @@ ncmdumpGUIwithoutgo::ncmdumpGUIwithoutgo(QWidget* parent)
 {
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     setWindowTitle("NCM Converter");
+
+    setAcceptDrops(true);
 
     QMenuBar* menuBar = new QMenuBar(this);
     mainMenu = new QMenu("NCM Converter", this);
@@ -189,15 +196,17 @@ ncmdumpGUIwithoutgo::ncmdumpGUIwithoutgo(QWidget* parent)
         "QCheckBox { color: #2b2f4c; font-weight: 500; }"
         "QCheckBox::indicator { width: 16px; height: 16px; }"
         "QLabel { color: #2b2f4c; font-weight: 500; }"
-        "QMenu{ background: rgba(255,255,255,0.85); border: 0px solid transparent; outline: none; border - radius: 15px; margin: 0px; padding: 5px; }"
-        "QMenu::item{background: transparent; padding: 6px 20px;}"
-        "QMenu::item:selected{background: rgba(159,139,203,0.3); border - radius: 10px;}ted{background: rgba(159,139,203,0.3); border - radius: 10px;}"
+        "QMenuBar { background: transparent; color: #2b2f4c; border: none; }"
+        "QMenuBar::item:selected { background: rgba(255,255,255,0.3); border-radius: 10px; }"
+        "QMenu { background: rgba(255,255,255,0.85); border: none; outline: none; border-radius: 0px; margin: 0px; padding: 5px; }"
+        "QMenu::item { background: transparent; padding: 6px 20px; }"
+        "QMenu::item:selected { background: rgba(159,139,203,0.3); }"
         "QDialog { background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
         "   stop:0 #c0d9ff, stop:0.5 #e0c8ff, stop:1 #ffe6c7); }"
         "QDialog QLabel { color: #2b2f4c; }"
         "QDialog QPushButton {"
         "   background: rgba(255,255,255,0.6);"
-        "   border: 1px solid rgba(255,255,255,0.7);"
+        "   border: none;"
         "   border-radius: 30px;"
         "   padding: 6px 18px;"
         "   color: #2b2f4c;"
@@ -224,6 +233,7 @@ ncmdumpGUIwithoutgo::ncmdumpGUIwithoutgo(QWidget* parent)
     connect(btnDelete, &QPushButton::clicked, this, &ncmdumpGUIwithoutgo::onDeleteSelected);
     connect(btnSelectOutput, &QPushButton::clicked, this, &ncmdumpGUIwithoutgo::onSelectOutputDir);
     connect(btnConvert, &QPushButton::clicked, this, &ncmdumpGUIwithoutgo::onConvert);
+
 }
 
 ncmdumpGUIwithoutgo::~ncmdumpGUIwithoutgo()
@@ -239,6 +249,7 @@ bool ncmdumpGUIwithoutgo::initialize()
     if (dllLoaded) return true;
     loadDllFunctions();
     dllLoaded = true;
+
     QString ffmpegPath = QCoreApplication::applicationDirPath() + "/ffmpeg.exe";
     if (!QFile::exists(ffmpegPath)) {
         appendLog("警告：未找到 ffmpeg.exe，MP3转换功能不可用");
@@ -253,10 +264,12 @@ void ncmdumpGUIwithoutgo::loadDllFunctions()
         appendLog("错误: 无法加载 libncmdump.dll");
         return;
     }
+
     createCrypt = (CreateCryptFunc)lib.resolve("CreateNeteaseCrypt");
     dumpFunc = (DumpFunc)lib.resolve("Dump");
     fixMetadataFunc = (FixMetadataFunc)lib.resolve("FixMetadata");
     destroyCrypt = (DestroyCryptFunc)lib.resolve("DestroyNeteaseCrypt");
+
     if (!createCrypt || !dumpFunc || !fixMetadataFunc || !destroyCrypt) {
         appendLog("错误: DLL 中缺少必要的导出函数");
     }
@@ -269,6 +282,11 @@ void ncmdumpGUIwithoutgo::onAddFiles()
 {
     QStringList files = QFileDialog::getOpenFileNames(this, "选择 NCM 文件", "", "NCM 文件 (*.ncm)");
     if (files.isEmpty()) return;
+    addFiles(files);
+}
+
+void ncmdumpGUIwithoutgo::addFiles(const QStringList& files)
+{
     for (const QString& file : files) {
         bool exists = false;
         for (int i = 0; i < fileListWidget->count(); ++i) {
@@ -290,25 +308,14 @@ void ncmdumpGUIwithoutgo::onAddFolder()
 {
     QString dir = QFileDialog::getExistingDirectory(this, "选择包含 NCM 文件的文件夹");
     if (dir.isEmpty()) return;
+    QStringList fileList;
     QDirIterator it(dir, QStringList() << "*.ncm", QDir::Files, QDirIterator::Subdirectories);
-    int added = 0;
     while (it.hasNext()) {
-        QString file = it.next();
-        bool exists = false;
-        for (int i = 0; i < fileListWidget->count(); ++i) {
-            if (fileListWidget->item(i)->text() == file) {
-                exists = true;
-                break;
-            }
-        }
-        if (!exists) {
-            QListWidgetItem* item = new QListWidgetItem(file, fileListWidget);
-            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-            item->setCheckState(Qt::Unchecked);
-            added++;
-        }
+        fileList << it.next();
     }
-    appendLog(QString("从文件夹添加了 %1 个 NCM 文件，当前共 %2 个").arg(added).arg(fileListWidget->count()));
+    if (!fileList.isEmpty()) {
+        addFiles(fileList);
+    }
 }
 
 void ncmdumpGUIwithoutgo::onClearFiles()
@@ -341,9 +348,43 @@ void ncmdumpGUIwithoutgo::onSelectOutputDir()
     }
 }
 
+void ncmdumpGUIwithoutgo::dragEnterEvent(QDragEnterEvent* event)
+{
+    if (event->mimeData()->hasUrls()) {
+        event->acceptProposedAction();
+    }
+}
+
+void ncmdumpGUIwithoutgo::dropEvent(QDropEvent* event)
+{
+    const QMimeData* mime = event->mimeData();
+    if (!mime->hasUrls()) return;
+
+    QStringList fileList;
+    for (const QUrl& url : mime->urls()) {
+        QString path = url.toLocalFile();
+        if (!path.isEmpty()) {
+            QFileInfo info(path);
+            if (info.isDir()) {
+                QDirIterator it(path, QStringList() << "*.ncm", QDir::Files, QDirIterator::Subdirectories);
+                while (it.hasNext()) {
+                    fileList << it.next();
+                }
+            }
+            else if (info.suffix().toLower() == "ncm") {
+                fileList << path;
+            }
+        }
+    }
+    if (!fileList.isEmpty()) {
+        addFiles(fileList);
+    }
+}
+
 QString ncmdumpGUIwithoutgo::convertFile(const QString& ncmPath, const QString& outputDir)
 {
     if (!createCrypt) return QString();
+
     QByteArray utf8Path = ncmPath.toUtf8();
     const char* outParam = "";
     QByteArray utf8Out;
@@ -351,9 +392,11 @@ QString ncmdumpGUIwithoutgo::convertFile(const QString& ncmPath, const QString& 
         utf8Out = outputDir.toUtf8();
         outParam = utf8Out.constData();
     }
+
     int result = SafeCallDll(utf8Path.constData(), outParam,
         createCrypt, dumpFunc, fixMetadataFunc, destroyCrypt);
     if (result != 0) return QString();
+
     QFileInfo info(ncmPath);
     QString baseName = info.completeBaseName();
     QString targetDir = outputDir.isEmpty() ? info.absolutePath() : outputDir;
@@ -371,12 +414,15 @@ bool ncmdumpGUIwithoutgo::convertToMp3Async(const QString& inputFlac, const QStr
         appendLog("错误: 找不到 ffmpeg.exe");
         return false;
     }
+
     if (currentMp3Process) return false;
+
     currentMp3Process = new QProcess(this);
     currentMp3Process->setProgram(ffmpegPath);
     QStringList args;
     args << "-i" << inputFlac << "-b:a" << "192k" << outputMp3;
     currentMp3Process->setArguments(args);
+
     connect(currentMp3Process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
         this, &ncmdumpGUIwithoutgo::onMp3ConvertFinished);
     connect(currentMp3Process, &QProcess::errorOccurred, [this](QProcess::ProcessError error) {
@@ -387,6 +433,7 @@ bool ncmdumpGUIwithoutgo::convertToMp3Async(const QString& inputFlac, const QStr
         }
         processNextFile();
         });
+
     currentMp3Process->start();
     if (!currentMp3Process->waitForStarted(3000)) {
         appendLog("FFmpeg 启动失败");
@@ -414,6 +461,7 @@ void ncmdumpGUIwithoutgo::onMp3ConvertFinished(int exitCode, QProcess::ExitStatu
         else {
             appendLog(QString("MP3转换失败: %1 (退出码: %2)").arg(currentFlacFile).arg(exitCode));
         }
+
         currentMp3Process->deleteLater();
         currentMp3Process = nullptr;
         currentFlacFile.clear();
@@ -427,12 +475,15 @@ void ncmdumpGUIwithoutgo::processNextFile()
     if (!flacQueue.isEmpty()) {
         QString flac = flacQueue.dequeue();
         QString ncm = ncmQueue.dequeue();
+
         QFileInfo info(flac);
         QString baseName = info.completeBaseName();
         QString targetDir = info.absolutePath();
         QString mp3Path = targetDir + "/" + baseName + ".mp3";
+
         currentFlacFile = flac;
         currentMp3File = mp3Path;
+
         appendLog(QString("正在转换为MP3: %1").arg(mp3Path));
         if (!convertToMp3Async(flac, mp3Path)) {
             appendLog("MP3转换启动失败，跳过: " + flac);
@@ -454,13 +505,16 @@ void ncmdumpGUIwithoutgo::onConvert()
         QMessageBox::warning(this, "警告", "没有要转换的文件");
         return;
     }
+
     if (!createCrypt) {
         QMessageBox::critical(this, "错误", "DLL 未正确加载");
         return;
     }
+
     QString outputDir = outputDirEdit->text().trimmed();
     bool needMp3 = checkBoxToMp3->isChecked();
     bool keepFlac = checkBoxKeepFlac->isChecked();
+
     if (needMp3) {
         QString ffmpegPath = QCoreApplication::applicationDirPath() + "/ffmpeg.exe";
         if (!QFile::exists(ffmpegPath)) {
@@ -469,23 +523,28 @@ void ncmdumpGUIwithoutgo::onConvert()
             keepFlac = false;
         }
     }
+
     btnConvert->setEnabled(false);
     flacQueue.clear();
     ncmQueue.clear();
     processedCount = 0;
     totalFiles = fileListWidget->count();
     keepFlacAfterMp3 = keepFlac;
+
     int successDecrypt = 0, failDecrypt = 0;
     QList<QString> flacList, ncmList;
+
     for (int i = 0; i < fileListWidget->count(); ++i) {
         QString file = fileListWidget->item(i)->text();
         appendLog(QString("正在解密: %1").arg(file));
+
         QString outputFilePath = convertFile(file, outputDir);
         if (outputFilePath.isEmpty()) {
             failDecrypt++;
             appendLog(QString("解密失败: %1").arg(file));
             continue;
         }
+
         QFileInfo outInfo(outputFilePath);
         QString format = outInfo.suffix().toUpper();
         if (needMp3 && format == "FLAC") {
@@ -498,9 +557,11 @@ void ncmdumpGUIwithoutgo::onConvert()
         }
         successDecrypt++;
     }
+
     if (!flacList.isEmpty()) {
         for (const QString& f : flacList) flacQueue.enqueue(f);
         for (const QString& n : ncmList) ncmQueue.enqueue(n);
+
         progressBar->setRange(0, 0);
         progressBar->setValue(0);
         appendLog(QString("开始异步转换MP3，共 %1 个文件...").arg(flacQueue.size()));
@@ -526,11 +587,52 @@ void ncmdumpGUIwithoutgo::onSettings()
     QDialog settingsDialog(this);
     settingsDialog.setWindowTitle("设置");
     settingsDialog.setWindowFlags(settingsDialog.windowFlags() & ~Qt::WindowContextHelpButtonHint);
-    settingsDialog.setFixedSize(600, 400);
-    QVBoxLayout* layout = new QVBoxLayout(&settingsDialog);
-    QLabel* label = new QLabel("此页开发中...", &settingsDialog);
-    label->setAlignment(Qt::AlignCenter);
-    layout->addWidget(label);
+    settingsDialog.setFixedSize(450, 250);
+
+    QVBoxLayout* mainLayout = new QVBoxLayout(&settingsDialog);
+
+    QString iniPath = QCoreApplication::applicationDirPath() + "/settings.ini";
+    QSettings settings(iniPath, QSettings::IniFormat);
+    QString dnc = settings.value("DNC", "YES").toString();
+
+    QLabel* label = new QLabel("双击 .ncm 文件后：", &settingsDialog);
+    mainLayout->addWidget(label);
+
+    QRadioButton* radioConvert = new QRadioButton("转换（打开 NCM Converter）", &settingsDialog);
+    QRadioButton* radioPlay = new QRadioButton("播放（打开网易云音乐）", &settingsDialog);
+    if (dnc == "YES") {
+        radioConvert->setChecked(true);
+    }
+    else {
+        radioPlay->setChecked(true);
+    }
+    mainLayout->addWidget(radioConvert);
+    mainLayout->addWidget(radioPlay);
+
+    mainLayout->addStretch();
+
+    QHBoxLayout* btnLayout = new QHBoxLayout;
+    QPushButton* saveBtn = new QPushButton("保存设置", &settingsDialog);
+    QPushButton* closeBtn = new QPushButton("关闭", &settingsDialog);
+    btnLayout->addStretch();
+    btnLayout->addWidget(saveBtn);
+    btnLayout->addWidget(closeBtn);
+    mainLayout->addLayout(btnLayout);
+
+    QObject::connect(saveBtn, &QPushButton::clicked, [&]() {
+        if (radioConvert->isChecked()) {
+            settings.setValue("DNC", "YES");
+        }
+        else {
+            settings.setValue("DNC", "NO");
+        }
+        settings.sync();
+        appendLog("设置已保存");
+        QMessageBox::information(&settingsDialog, "成功", "设置已保存。");
+        });
+
+    QObject::connect(closeBtn, &QPushButton::clicked, &settingsDialog, &QDialog::accept);
+
     settingsDialog.exec();
 }
 
@@ -539,12 +641,11 @@ void ncmdumpGUIwithoutgo::onAbout()
     QDialog aboutDialog(this);
     aboutDialog.setWindowTitle("关于 “NCM Converter”");
     aboutDialog.setWindowFlags(aboutDialog.windowFlags() & ~Qt::WindowContextHelpButtonHint);
-    aboutDialog.setFixedSize(520, 700);
+    aboutDialog.setFixedSize(620, 520);
 
     QVBoxLayout* mainLayout = new QVBoxLayout(&aboutDialog);
     mainLayout->setSpacing(8);
 
-    // ---- 左上角：图标 + 名称（水平排列） ----
     QHBoxLayout* titleLayout = new QHBoxLayout;
     titleLayout->setAlignment(Qt::AlignLeft);
 
@@ -562,12 +663,10 @@ void ncmdumpGUIwithoutgo::onAbout()
     titleFont.setBold(true);
     titleLabel->setFont(titleFont);
     titleLayout->addWidget(titleLabel);
-
     titleLayout->addStretch();
     mainLayout->addLayout(titleLayout);
 
-    // ---- 版本、版权、作者等 ----
-    QLabel* versionLabel = new QLabel("1.0 - Release", &aboutDialog);
+    QLabel* versionLabel = new QLabel("1.1.0 - Release", &aboutDialog);
     mainLayout->addWidget(versionLabel);
 
     QLabel* copyrightLabel = new QLabel("Copyright (C) 2026 ZHB3306", &aboutDialog);
@@ -580,36 +679,37 @@ void ncmdumpGUIwithoutgo::onAbout()
     mainLayout->addWidget(licenseLabel);
 
     QLabel* linkLabel = new QLabel(
-        "<a href='https://github.com/zhb3306/ncmdump-GUI' style='color: #6b5b9b;'>GitHub 项目主页</a>",
-        &aboutDialog
-    );
+        "<a href='https://github.com/zhb3306/NCM-Converter' style='color: #6b5b9b;'>GitHub 项目主页</a>",
+        &aboutDialog);
     linkLabel->setOpenExternalLinks(true);
     mainLayout->addWidget(linkLabel);
 
     QLabel* warrantyLabel = new QLabel("本软件按“现状”提供，不提供任何担保。", &aboutDialog);
     mainLayout->addWidget(warrantyLabel);
 
-    // ---- 引用信息（可点击链接） ----
-    QLabel* refTitleLabel = new QLabel("引用项目：", &aboutDialog);
+    QLabel* refTitleLabel = new QLabel("引用", &aboutDialog);
     QFont refFont = refTitleLabel->font();
     refFont.setBold(true);
     refTitleLabel->setFont(refFont);
     mainLayout->addWidget(refTitleLabel);
 
     QLabel* refContentLabel = new QLabel(
-        "本软件使用了以下开源项目：<br>"
-        "• <a href='https://github.com/taurusxin/ncmdump' style='color: #6b5b9b;'>libncmdump</a>（MIT）<br>"
-        "• <a href='https://ffmpeg.org/' style='color: #6b5b9b;'>FFmpeg</a>（LGPL-2.1+）<br>"
-        "• <a href='https://www.qt.io/' style='color: #6b5b9b;'>Qt 框架</a>（LGPL-3.0 / GPL-3.0）<br>"
-        "感谢他们的付出！",
-        &aboutDialog
-    );
-    refContentLabel->setWordWrap(true);
+        QStringLiteral(
+            "本软件使用了以下开源项目：<br>"
+            "• <a href='https://github.com/taurusxin/ncmdump' style='color: #6b5b9b;'>libncmdump</a>（MIT）<br>"
+            "• <a href='https://ffmpeg.org/' style='color: #6b5b9b;'>FFmpeg</a>（LGPL-2.1+）<br>"
+            "• <a href='https://www.qt.io/' style='color: #6b5b9b;'>Qt 框架</a>（LGPL-3.0 / GPL-3.0）<br>",
+            "这些项目的作者都做了非常棒的工作，提供了强大的工具和库，使得这个项目成为可能。"
+            ）,
+            &aboutDialog
+        )
+      ) ;refContentLabel->setWordWrap(true);
     refContentLabel->setOpenExternalLinks(true);
     refContentLabel->setStyleSheet("color: #3a4c6c; font-size: 10pt;");
     mainLayout->addWidget(refContentLabel);
+    //特别感谢 taurusxin 的 libncmdump，提供了核心的解密功能，并且开源了代码供学习和使用。//也感谢 FFmpeg 的开发者们，提供了强大的音频处理工具，让 MP3 转换变得简单。还有 Qt 社区，提供了优秀的跨平台 GUI 框架，让这个工具拥有了美观易用的界面。//此处文案为Github Copilot 的自动补全，嘿嘿用着不错。
+       //真的很感谢他们！！！
 
-    // ---- GPL-3.0 协议全文 ----
     QTextEdit* textEdit = new QTextEdit(&aboutDialog);
     textEdit->setReadOnly(true);
     QFile file(":/gpl-3.0.txt");
@@ -619,10 +719,33 @@ void ncmdumpGUIwithoutgo::onAbout()
         file.close();
     }
     else {
-        textEdit->setPlainText("GPL-3.0 协议文本未找到，请检查资源文件。");
+        textEdit->setPlainText("＞︿＜ GPL-3.0 协议文本未找到，请检查资源文件。");
     }
     textEdit->setAlignment(Qt::AlignCenter);
     mainLayout->addWidget(textEdit);
 
     aboutDialog.exec();
+}
+void ncmdumpGUIwithoutgo::associateFileType()
+{
+    QString appPath = QCoreApplication::applicationDirPath();
+    QString exePath = appPath + "/NCM Converter.exe";
+    QString iconPath = appPath + "/icons/NCM_File.ico";
+
+    if (!QFile::exists(iconPath)) {
+        appendLog("＞︿＜ 警告：图标文件不存在，无法设置文件图标。");
+        iconPath = exePath;
+    }
+
+    QSettings extSettings("HKEY_CURRENT_USER\\Software\\Classes\\.ncm", QSettings::NativeFormat);
+    extSettings.setValue("Default", "NCMConverter.ncm");
+
+    QSettings progSettings("HKEY_CURRENT_USER\\Software\\Classes\\NCMConverter.ncm", QSettings::NativeFormat);
+    progSettings.setValue("Default", "NCM 加密音乐文件");
+
+    QSettings iconSettings("HKEY_CURRENT_USER\\Software\\Classes\\NCMConverter.ncm\\DefaultIcon", QSettings::NativeFormat);
+    iconSettings.setValue("Default", iconPath + ",0");
+
+    QSettings cmdSettings("HKEY_CURRENT_USER\\Software\\Classes\\NCMConverter.ncm\\shell\\open\\command", QSettings::NativeFormat);
+    cmdSettings.setValue("Default", "\"" + exePath + "\" \"%1\"");
 }
