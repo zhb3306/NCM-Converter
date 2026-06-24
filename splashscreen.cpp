@@ -31,13 +31,16 @@ SplashScreen::SplashScreen(QWidget* parent)
 
     QWidget* cardWidget = new QWidget(this);
     cardWidget->setObjectName("cardWidget");
-    cardWidget->setStyleSheet(
-        "QWidget#cardWidget {"
+    /*cardWidget->setStyleSheet(
+      "QWidget#cardWidget {"
         "   background: rgba(255, 255, 255, 0.5);"
         "   border-radius: 25px;"
         "   border: none;"
-        "}"
+         "}"
+        
     );
+    */
+    
 
     QVBoxLayout* cardLayout = new QVBoxLayout(cardWidget);
     cardLayout->setContentsMargins(20, 20, 20, 20);

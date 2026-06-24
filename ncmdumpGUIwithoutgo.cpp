@@ -135,6 +135,7 @@ ncmdumpGUIwithoutgo::ncmdumpGUIwithoutgo(QWidget* parent)
     setCentralWidget(central);
     resize(800, 600);
 
+   /*
     QString styleSheet =
         "QMainWindow { background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
         "   stop:0 #c0d9ff, stop:0.35 #e0c8ff, stop:0.7 #ffe6c7, stop:1 #b8e1fc); }"
@@ -223,9 +224,11 @@ ncmdumpGUIwithoutgo::ncmdumpGUIwithoutgo(QWidget* parent)
         "   border: 1px solid rgba(255,255,255,0.5);"
         "   border-radius: 20px;"
         "}";
+        
 
     setStyleSheet(styleSheet);
     menuBar->setStyleSheet("background: transparent; color: #2b2f4c;");
+    */
 
     connect(btnAddFiles, &QPushButton::clicked, this, &ncmdumpGUIwithoutgo::onAddFiles);
     connect(btnAddFolder, &QPushButton::clicked, this, &ncmdumpGUIwithoutgo::onAddFolder);
@@ -646,10 +649,17 @@ void ncmdumpGUIwithoutgo::onAbout()
     QVBoxLayout* mainLayout = new QVBoxLayout(&aboutDialog);
     mainLayout->setSpacing(8);
 
+    QTabWidget* tabWidget = new QTabWidget(&aboutDialog);
+
+    // ========== 标签页1：基本 ==========
+    QWidget* basicTab = new QWidget(tabWidget);
+    QVBoxLayout* basicLayout = new QVBoxLayout(basicTab);
+    basicLayout->setSpacing(8);
+
+    // 图标 + 名称
     QHBoxLayout* titleLayout = new QHBoxLayout;
     titleLayout->setAlignment(Qt::AlignLeft);
-
-    QLabel* iconLabel = new QLabel(&aboutDialog);
+    QLabel* iconLabel = new QLabel(basicTab);
     QIcon icon(":/icons/NCMC.ico");
     if (!icon.isNull())
         iconLabel->setPixmap(icon.pixmap(64, 64));
@@ -657,59 +667,124 @@ void ncmdumpGUIwithoutgo::onAbout()
         iconLabel->setText("[图标]");
     titleLayout->addWidget(iconLabel);
 
-    QLabel* titleLabel = new QLabel("NCM Converter", &aboutDialog);
+    QLabel* titleLabel = new QLabel("NCM Converter", basicTab);
     QFont titleFont = titleLabel->font();
     titleFont.setPointSize(16);
     titleFont.setBold(true);
     titleLabel->setFont(titleFont);
     titleLayout->addWidget(titleLabel);
     titleLayout->addStretch();
-    mainLayout->addLayout(titleLayout);
+    basicLayout->addLayout(titleLayout);
 
-    QLabel* versionLabel = new QLabel("1.1.0 - Release", &aboutDialog);
-    mainLayout->addWidget(versionLabel);
+    QLabel* versionLabel = new QLabel("版本 1.1.1-Release", basicTab);
+    basicLayout->addWidget(versionLabel);
 
-    QLabel* copyrightLabel = new QLabel("Copyright (C) 2026 ZHB3306", &aboutDialog);
-    mainLayout->addWidget(copyrightLabel);
+    QLabel* copyrightLabel = new QLabel("Copyright (C) 2026 ZHB3306", basicTab);
+    basicLayout->addWidget(copyrightLabel);
 
-    QLabel* authorLabel = new QLabel("作者: ZHB3306", &aboutDialog);
-    mainLayout->addWidget(authorLabel);
+    QLabel* authorLabel = new QLabel("作者: ZHB3306", basicTab);
+    basicLayout->addWidget(authorLabel);
 
-    QLabel* licenseLabel = new QLabel("本软件遵循 GPL-3.0 协议", &aboutDialog);
-    mainLayout->addWidget(licenseLabel);
+    QLabel* licenseLabel = new QLabel("本软件遵循 GPL-3.0 协议", basicTab);
+    basicLayout->addWidget(licenseLabel);
 
     QLabel* linkLabel = new QLabel(
         "<a href='https://github.com/zhb3306/NCM-Converter' style='color: #6b5b9b;'>GitHub 项目主页</a>",
-        &aboutDialog);
+        basicTab);
     linkLabel->setOpenExternalLinks(true);
-    mainLayout->addWidget(linkLabel);
+    basicLayout->addWidget(linkLabel);
 
-    QLabel* warrantyLabel = new QLabel("本软件按“现状”提供，不提供任何担保。", &aboutDialog);
-    mainLayout->addWidget(warrantyLabel);
+    QLabel* warrantyLabel = new QLabel("本软件按“现状”提供，不提供任何担保。", basicTab);
+    basicLayout->addWidget(warrantyLabel);
 
-    QLabel* refTitleLabel = new QLabel("引用", &aboutDialog);
+    QLabel* refTitleLabel = new QLabel("引用", basicTab);
     QFont refFont = refTitleLabel->font();
     refFont.setBold(true);
     refTitleLabel->setFont(refFont);
-    mainLayout->addWidget(refTitleLabel);
+    basicLayout->addWidget(refTitleLabel);
 
     QLabel* refContentLabel = new QLabel(
         QStringLiteral(
             "本软件使用了以下开源项目：<br>"
             "• <a href='https://github.com/taurusxin/ncmdump' style='color: #6b5b9b;'>libncmdump</a>（MIT）<br>"
             "• <a href='https://ffmpeg.org/' style='color: #6b5b9b;'>FFmpeg</a>（LGPL-2.1+）<br>"
-            "• <a href='https://www.qt.io/' style='color: #6b5b9b;'>Qt 框架</a>（LGPL-3.0 / GPL-3.0）<br>",
-            "这些项目的作者都做了非常棒的工作，提供了强大的工具和库，使得这个项目成为可能。"
-            ）,
-            &aboutDialog
-        )
-      ) ;refContentLabel->setWordWrap(true);
+            "• <a href='https://www.qt.io/' style='color: #6b5b9b;'>Qt 框架</a>（LGPL-3.0 / GPL-3.0）"
+        ),
+        basicTab);
+    refContentLabel->setWordWrap(true);
     refContentLabel->setOpenExternalLinks(true);
     refContentLabel->setStyleSheet("color: #3a4c6c; font-size: 10pt;");
-    mainLayout->addWidget(refContentLabel);
-    //特别感谢 taurusxin 的 libncmdump，提供了核心的解密功能，并且开源了代码供学习和使用。//也感谢 FFmpeg 的开发者们，提供了强大的音频处理工具，让 MP3 转换变得简单。还有 Qt 社区，提供了优秀的跨平台 GUI 框架，让这个工具拥有了美观易用的界面。//此处文案为Github Copilot 的自动补全，嘿嘿用着不错。
-       //真的很感谢他们！！！
+    basicLayout->addWidget(refContentLabel);
 
+    basicLayout->addStretch();
+    tabWidget->addTab(basicTab, "基本");
+
+    // ========== 标签页2：版本信息 ==========
+    QWidget* versionTab = new QWidget(tabWidget);
+    QVBoxLayout* versionLayout = new QVBoxLayout(versionTab);
+    versionLayout->setSpacing(10);
+
+    QLabel* versionInfoTitle = new QLabel("版本信息", versionTab);
+    QFont vTitleFont = versionInfoTitle->font();
+    vTitleFont.setPointSize(12);
+    vTitleFont.setBold(true);
+    versionInfoTitle->setFont(vTitleFont);
+    versionLayout->addWidget(versionInfoTitle);
+
+    // 详细信息
+    QLabel* versionDetails = new QLabel(
+        QString("软件版本：1.1.1-Release\n")
+        + "Qt 版本：" + QT_VERSION_STR + "\n"
+        + "构建日期：" + __DATE__ + " " + __TIME__ + "\n"
+        + "编译器：MSVC 2019 (64-bit)\n"
+        + "操作系统：Windows 7 / 10 / 11 (64-bit)",
+        versionTab);
+    versionDetails->setStyleSheet("color: #2b2f4c; font-size: 11pt;");
+    versionDetails->setWordWrap(true);
+    versionLayout->addWidget(versionDetails);
+
+    QLabel* extraInfo = new QLabel(
+        "本版本基于 Qt 5.15.2 开发，使用 Visual Studio 2019 工具链编译。\n"
+        "更多信息请访问项目主页。",
+        versionTab);
+    extraInfo->setStyleSheet("color: #5a6c8c; font-size: 10pt;");
+    extraInfo->setWordWrap(true);
+    versionLayout->addWidget(extraInfo);
+
+    // 🆕 版本说明
+    QLabel* releaseNoteTitle = new QLabel("版本说明", versionTab);
+    QFont rnFont = releaseNoteTitle->font();
+    rnFont.setBold(true);
+    releaseNoteTitle->setFont(rnFont);
+    versionLayout->addWidget(releaseNoteTitle);
+
+    QTextEdit* releaseNoteEdit = new QTextEdit(versionTab);
+    releaseNoteEdit->setReadOnly(true);
+    releaseNoteEdit->setPlainText("1.本次更新\n"
+                                  "(1)因为测出了关于样式表的BUG，因此暂时移除了样式表\n"
+                                  "(2)加入了版本信息与说明\n"
+                                  "2.未来更新\n"
+                                  "(1)添加“更新”部分，可以检查更新，可以在菜单栏显示（将不会出现“强制更新制”）。\n"
+                                  "3.声明：\n"
+                                  "(1)除非新系统不支持，否则将永远不会更新Qt的版本。（为了兼容Windows7）");
+    releaseNoteEdit->setMaximumHeight(120);
+    releaseNoteEdit->setStyleSheet(
+        "background: rgba(255,255,255,0.4);"
+        "border: 1px solid rgba(0,0,0,0.1);"
+        "border-radius: 8px;"
+        "padding: 6px;"
+        "color: #2b2f4c;"
+        "font-size: 10pt;"
+    );
+    versionLayout->addWidget(releaseNoteEdit);
+
+    versionLayout->addStretch();
+    tabWidget->addTab(versionTab, "版本信息");
+
+    // ---- 将 TabWidget 添加到主布局 ----
+    mainLayout->addWidget(tabWidget);
+
+    // ---- 公共底部：GPL-3.0 协议 ----
     QTextEdit* textEdit = new QTextEdit(&aboutDialog);
     textEdit->setReadOnly(true);
     QFile file(":/gpl-3.0.txt");
@@ -722,6 +797,7 @@ void ncmdumpGUIwithoutgo::onAbout()
         textEdit->setPlainText("＞︿＜ GPL-3.0 协议文本未找到，请检查资源文件。");
     }
     textEdit->setAlignment(Qt::AlignCenter);
+    textEdit->setMaximumHeight(150);
     mainLayout->addWidget(textEdit);
 
     aboutDialog.exec();
