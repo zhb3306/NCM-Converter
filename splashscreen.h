@@ -19,6 +19,8 @@
 #define SPLASHSCREEN_H
 
 #include <QWidget>
+#include <QLabel>
+#include <QTimer>
 
 class SplashScreen : public QWidget
 {
@@ -26,10 +28,18 @@ class SplashScreen : public QWidget
 public:
     explicit SplashScreen(QWidget* parent = nullptr);
 
-    void setStatus(const QString& status);
+    void setStatus(const QString& status);   // 保留但已禁用
 
 protected:
     void paintEvent(QPaintEvent* event) override;
+
+private slots:
+    void updateStatus();   // 计时器槽
+
+private:
+    QLabel* statusLabel;
+    QTimer* timer;
+    int step;              // 当前步骤
 };
 
 #endif
