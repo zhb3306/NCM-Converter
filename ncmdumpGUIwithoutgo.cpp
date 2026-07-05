@@ -676,7 +676,7 @@ void ncmdumpGUIwithoutgo::onAbout()
     titleLayout->addStretch();
     basicLayout->addLayout(titleLayout);
 
-    QLabel* versionLabel = new QLabel("版本 1.1.1-Release", basicTab);
+    QLabel* versionLabel = new QLabel("版本 1.1.2 - Release", basicTab);
     basicLayout->addWidget(versionLabel);
 
     QLabel* copyrightLabel = new QLabel("Copyright (C) 2026 ZHB3306", basicTab);
@@ -733,7 +733,7 @@ void ncmdumpGUIwithoutgo::onAbout()
 
     // 详细信息
     QLabel* versionDetails = new QLabel(
-        QString("软件版本：1.1.1-Release\n")
+        QString("软件版本：1.1.2 - Release\n")
         + "Qt 版本：" + QT_VERSION_STR + "\n"
         + "构建日期：" + __DATE__ + " " + __TIME__ + "\n"
         + "编译器：MSVC 2019 (64-bit)\n"
