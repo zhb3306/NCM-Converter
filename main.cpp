@@ -39,6 +39,7 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <QDir>
+#include <QSysInfo>
 
 void associateFileType()
 {
@@ -114,6 +115,10 @@ static bool isAlreadyRunning()
 
 int main(int argc, char* argv[])
 {
+    // Win7兼容（重要！！！）
+    qputenv("QT_BEARER_POLL_TIMEOUT", "-1");
+    qputenv("QT_EXCLUDE_GENERIC_BEARER", "1");
+
     QApplication a(argc, argv);
 
     a.setApplicationName("NCM Converter");
@@ -145,10 +150,7 @@ int main(int argc, char* argv[])
     font.setPointSize(10);
     a.setFont(font);
     if (!font.family().isEmpty()) {
-        a.setStyleSheet(QString("* { font-family: \"%1\"; font-weight: bold; }").arg(font.family()));
-    }
-    else {
-        a.setStyleSheet("* { font-weight: bold; }");
+        a.setStyleSheet(QString("* { font-family: \"%1\"; } QMenuBar::item { font-weight: 900; }").arg(font.family()));
     }
 
     if (isAlreadyRunning()) {
@@ -224,6 +226,13 @@ int main(int argc, char* argv[])
     QTimer::singleShot(remaining, [&]() {
         splash.close();
         w.show();
+
+        // 静默检查更新（Win7 跳过）
+        if (QSysInfo::productVersion() != QStringLiteral("7")) {
+            QTimer::singleShot(2000, [&w]() {
+                w.doSilentCheckUpdate();
+            });
+        }
 
         QStringList args = QCoreApplication::arguments();
         if (args.size() > 1) {

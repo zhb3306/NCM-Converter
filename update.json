@@ -1,0 +1,6 @@
+{
+    "latest_version": "2.0.0",
+    "download_url": "https://github.com/zhb3306/NCM-Converter/releases",
+    "release_date": "2026-09-19",
+    "changelog": "- 新增更新检查功能（手动检查与启动时静默检查）\n- 新增更新按钮红黄闪烁提示\n- 新增运行日志查看与导出\n- 设置对话框新增更新相关与 Debug 选项"
+}

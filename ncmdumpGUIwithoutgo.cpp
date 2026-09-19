@@ -22,15 +22,19 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QPushButton>
+#include <QToolButton>
+#include <QCheckBox>
 #include <QListWidget>
 #include <QLabel>
 #include <QProgressBar>
+#include <QTabWidget>
 #include <QCoreApplication>
 #include <QDirIterator>
 #include <QFileInfo>
 #include <QProcess>
 #include <QDialog>
 #include <QTextEdit>
+#include <QStyle>
 #include <QPixmap>
 #include <QIcon>
 #include <QFile>
@@ -40,6 +44,11 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QMimeData>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QSysInfo>
 #include <windows.h>
 #include <eh.h>
 
@@ -65,7 +74,7 @@ static int SafeCallDll(const char* utf8Path, const char* outputDirUtf8,
 }
 
 ncmdumpGUIwithoutgo::ncmdumpGUIwithoutgo(QWidget* parent)
-    : QMainWindow(parent), currentMp3Process(nullptr), totalFiles(0), processedCount(0), keepFlacAfterMp3(false), dllLoaded(false)
+    : QMainWindow(parent), currentMp3Process(nullptr), totalFiles(0), processedCount(0), keepFlacAfterMp3(false), dllLoaded(false), flashTimer(nullptr), flashRed(false), networkManager(nullptr)
 {
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     setWindowTitle("NCM Converter");
@@ -78,11 +87,48 @@ ncmdumpGUIwithoutgo::ncmdumpGUIwithoutgo(QWidget* parent)
     actionAbout = new QAction("关于", this);
     mainMenu->addAction(actionSettings);
     mainMenu->addAction(actionAbout);
+
+    logAction = new QAction("日志", this);
+    logAction->setVisible(false);
+    mainMenu->addAction(logAction);
+
     menuBar->addMenu(mainMenu);
     setMenuBar(menuBar);
 
+    QFont mbFont = menuBar->font();
+    mbFont.setBold(true);
+    mbFont.setPointSize(mbFont.pointSize() + 1);
+    menuBar->setFont(mbFont);
+
     connect(actionSettings, &QAction::triggered, this, &ncmdumpGUIwithoutgo::onSettings);
     connect(actionAbout, &QAction::triggered, this, &ncmdumpGUIwithoutgo::onAbout);
+    connect(logAction, &QAction::triggered, this, &ncmdumpGUIwithoutgo::onShowLog);
+
+    updateMenu = new QMenu("更新", this);
+    actionCheckUpdate = new QAction("检查更新", this);
+    actionVersionInfo = new QAction("当前版本 " NCM_CONVERTER_VERSION, this);
+    actionVersionInfo->setEnabled(false);
+    updateMenu->addAction(actionCheckUpdate);
+    updateMenu->addSeparator();
+    updateMenu->addAction(actionVersionInfo);
+
+    connect(actionCheckUpdate, &QAction::triggered, this, &ncmdumpGUIwithoutgo::onCheckUpdate);
+
+    updateBtn = new QPushButton("更新", this);
+    updateBtn->setFlat(true);
+    updateBtn->setCursor(Qt::PointingHandCursor);
+    QObject::connect(updateBtn, &QPushButton::clicked, [this]() {
+        updateMenu->exec(updateBtn->mapToGlobal(QPoint(0, updateBtn->height())));
+    });
+
+    menuBar->setCornerWidget(updateBtn);
+
+    // 根据设置决定日志菜单是否可见
+    {
+        QString iniPath = QCoreApplication::applicationDirPath() + "/settings.ini";
+        QSettings settings(iniPath, QSettings::IniFormat);
+        logAction->setVisible(settings.value("DebugMode", false).toBool());
+    }
 
     QWidget* central = new QWidget(this);
     central->setObjectName("centralWidget");
@@ -465,6 +511,13 @@ void ncmdumpGUIwithoutgo::onMp3ConvertFinished(int exitCode, QProcess::ExitStatu
             appendLog(QString("MP3转换失败: %1 (退出码: %2)").arg(currentFlacFile).arg(exitCode));
         }
 
+        QString iniPath = QCoreApplication::applicationDirPath() + "/settings.ini";
+        QSettings settings(iniPath, QSettings::IniFormat);
+        if (settings.value("DebugMode", false).toBool()) {
+            QString statusStr = (exitStatus == QProcess::NormalExit) ? "正常退出" : "异常退出";
+            appendLog(QString("退出码：[%1][%2]").arg(exitCode).arg(statusStr));
+        }
+
         currentMp3Process->deleteLater();
         currentMp3Process = nullptr;
         currentFlacFile.clear();
@@ -590,29 +643,86 @@ void ncmdumpGUIwithoutgo::onSettings()
     QDialog settingsDialog(this);
     settingsDialog.setWindowTitle("设置");
     settingsDialog.setWindowFlags(settingsDialog.windowFlags() & ~Qt::WindowContextHelpButtonHint);
-    settingsDialog.setFixedSize(450, 250);
+    settingsDialog.setFixedSize(400, 320);
 
     QVBoxLayout* mainLayout = new QVBoxLayout(&settingsDialog);
 
     QString iniPath = QCoreApplication::applicationDirPath() + "/settings.ini";
     QSettings settings(iniPath, QSettings::IniFormat);
     QString dnc = settings.value("DNC", "YES").toString();
+    bool debugMode = settings.value("DebugMode", false).toBool();
+    bool disableUpdate = settings.value("DisableUpdate", false).toBool();
+    bool disableFlash = settings.value("DisableFlash", false).toBool();
 
-    QLabel* label = new QLabel("双击 .ncm 文件后：", &settingsDialog);
-    mainLayout->addWidget(label);
+    QTabWidget* tabWidget = new QTabWidget(&settingsDialog);
 
-    QRadioButton* radioConvert = new QRadioButton("转换（打开 NCM Converter）", &settingsDialog);
-    QRadioButton* radioPlay = new QRadioButton("播放（打开网易云音乐）", &settingsDialog);
+    QWidget* convertTab = new QWidget;
+    QVBoxLayout* convertLayout = new QVBoxLayout(convertTab);
+
+    QLabel* label = new QLabel("双击 .ncm 文件后：", convertTab);
+    convertLayout->addWidget(label);
+
+    QRadioButton* radioConvert = new QRadioButton("转换（打开 NCM Converter）", convertTab);
+    QRadioButton* radioPlay = new QRadioButton("播放（打开网易云音乐）", convertTab);
     if (dnc == "YES") {
         radioConvert->setChecked(true);
     }
     else {
         radioPlay->setChecked(true);
     }
-    mainLayout->addWidget(radioConvert);
-    mainLayout->addWidget(radioPlay);
+    convertLayout->addWidget(radioConvert);
+    convertLayout->addWidget(radioPlay);
+    convertLayout->addStretch();
 
-    mainLayout->addStretch();
+    QWidget* devTab = new QWidget;
+    QVBoxLayout* devLayout = new QVBoxLayout(devTab);
+
+    QHBoxLayout* debugLayout = new QHBoxLayout;
+    QCheckBox* debugCheck = new QCheckBox("Debug模式", devTab);
+    debugCheck->setChecked(debugMode);
+    debugLayout->addWidget(debugCheck);
+
+    QToolButton* debugHelpBtn = new QToolButton(devTab);
+    debugHelpBtn->setIcon(style()->standardIcon(QStyle::SP_MessageBoxInformation));
+    debugHelpBtn->setToolTip("开启后，每次转换完成都会在日志中显示退出码。");
+    QObject::connect(debugHelpBtn, &QToolButton::clicked, [&]() {
+        QMessageBox::information(&settingsDialog, "Debug模式",
+            "开启 Debug 模式后，每个文件转换完成时，日志末尾会追加该次 FFmpeg 进程的退出码与状态，便于排查转换失败原因。");
+    });
+    debugLayout->addWidget(debugHelpBtn);
+    debugLayout->addStretch();
+    devLayout->addLayout(debugLayout);
+    devLayout->addStretch();
+
+    QWidget* updateTab = new QWidget;
+    QVBoxLayout* updateLayout = new QVBoxLayout(updateTab);
+
+    QCheckBox* disableUpdateCheck = new QCheckBox("禁用启动时检查更新", updateTab);
+    disableUpdateCheck->setChecked(disableUpdate);
+    updateLayout->addWidget(disableUpdateCheck);
+
+    QLabel* updateHint1 = new QLabel("勾选后将不会在启动时检查更新，手动检查时仍可正常使用。", updateTab);
+    updateHint1->setWordWrap(true);
+    updateHint1->setStyleSheet("color: gray; font-size: 11px;");
+    updateLayout->addWidget(updateHint1);
+
+    updateLayout->addSpacing(8);
+
+    QCheckBox* disableFlashCheck = new QCheckBox("禁用更新闪烁", updateTab);
+    disableFlashCheck->setChecked(disableFlash);
+    updateLayout->addWidget(disableFlashCheck);
+
+    QLabel* updateHint2 = new QLabel("勾选后，有更新可用时更新按钮将只显示文字，不会红黄闪烁。", updateTab);
+    updateHint2->setWordWrap(true);
+    updateHint2->setStyleSheet("color: gray; font-size: 11px;");
+    updateLayout->addWidget(updateHint2);
+
+    updateLayout->addStretch();
+
+    tabWidget->addTab(convertTab, "转换相关");
+    tabWidget->addTab(updateTab, "更新相关");
+    tabWidget->addTab(devTab, "开发");
+    mainLayout->addWidget(tabWidget);
 
     QHBoxLayout* btnLayout = new QHBoxLayout;
     QPushButton* saveBtn = new QPushButton("保存设置", &settingsDialog);
@@ -629,10 +739,15 @@ void ncmdumpGUIwithoutgo::onSettings()
         else {
             settings.setValue("DNC", "NO");
         }
+        bool dbg = debugCheck->isChecked();
+        settings.setValue("DebugMode", dbg);
+        settings.setValue("DisableUpdate", disableUpdateCheck->isChecked());
+        settings.setValue("DisableFlash", disableFlashCheck->isChecked());
         settings.sync();
+        logAction->setVisible(dbg);
         appendLog("设置已保存");
         QMessageBox::information(&settingsDialog, "成功", "设置已保存。");
-        });
+    });
 
     QObject::connect(closeBtn, &QPushButton::clicked, &settingsDialog, &QDialog::accept);
 
@@ -676,7 +791,7 @@ void ncmdumpGUIwithoutgo::onAbout()
     titleLayout->addStretch();
     basicLayout->addLayout(titleLayout);
 
-    QLabel* versionLabel = new QLabel("版本 1.1.2 - Release", basicTab);
+    QLabel* versionLabel = new QLabel("版本 " NCM_CONVERTER_VERSION " - Release", basicTab);
     basicLayout->addWidget(versionLabel);
 
     QLabel* copyrightLabel = new QLabel("Copyright (C) 2026 ZHB3306", basicTab);
@@ -733,7 +848,7 @@ void ncmdumpGUIwithoutgo::onAbout()
 
     // 详细信息
     QLabel* versionDetails = new QLabel(
-        QString("软件版本：1.1.2 - Release\n")
+        QString("软件版本：" NCM_CONVERTER_VERSION " - Release\n")
         + "Qt 版本：" + QT_VERSION_STR + "\n"
         + "构建日期：" + __DATE__ + " " + __TIME__ + "\n"
         + "编译器：MSVC 2019 (64-bit)\n"
@@ -824,4 +939,378 @@ void ncmdumpGUIwithoutgo::associateFileType()
 
     QSettings cmdSettings("HKEY_CURRENT_USER\\Software\\Classes\\NCMConverter.ncm\\shell\\open\\command", QSettings::NativeFormat);
     cmdSettings.setValue("Default", "\"" + exePath + "\" \"%1\"");
+}
+
+void ncmdumpGUIwithoutgo::onShowLog()
+{
+    QDialog logDialog(this);
+    logDialog.setWindowTitle("运行日志");
+    logDialog.setWindowFlags(logDialog.windowFlags() & ~Qt::WindowContextHelpButtonHint);
+    logDialog.resize(680, 480);
+
+    QVBoxLayout* mainLayout = new QVBoxLayout(&logDialog);
+
+    QTextEdit* logView = new QTextEdit(&logDialog);
+    logView->setReadOnly(true);
+    logView->setPlainText(logEdit->toPlainText());
+    logView->moveCursor(QTextCursor::End);
+    mainLayout->addWidget(logView);
+
+    QHBoxLayout* btnLayout = new QHBoxLayout;
+    QPushButton* exportBtn = new QPushButton("导出日志", &logDialog);
+    QPushButton* closeBtn = new QPushButton("关闭", &logDialog);
+    btnLayout->addStretch();
+    btnLayout->addWidget(exportBtn);
+    btnLayout->addWidget(closeBtn);
+    mainLayout->addLayout(btnLayout);
+
+    QObject::connect(exportBtn, &QPushButton::clicked, [&]() {
+        QString savePath = QFileDialog::getSaveFileName(&logDialog, "导出日志", "NCMConverter_log.txt", "文本文件 (*.txt)");
+        if (!savePath.isEmpty()) {
+            QFile file(savePath);
+            if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                QTextStream stream(&file);
+                stream << logEdit->toPlainText();
+                file.close();
+                QMessageBox::information(&logDialog, "成功", "日志已导出。");
+            }
+            else {
+                QMessageBox::warning(&logDialog, "错误", "无法写入文件。");
+            }
+        }
+    });
+
+    QObject::connect(closeBtn, &QPushButton::clicked, &logDialog, &QDialog::accept);
+
+    logDialog.exec();
+}
+
+static QList<int> parseVersion(const QString& v)
+{
+    QList<int> parts;
+    for (const QString& s : v.split('.'))
+        parts.append(s.toInt());
+    return parts;
+}
+
+static bool isNewer(const QString& latest, const QString& current)
+{
+    QList<int> l = parseVersion(latest);
+    QList<int> c = parseVersion(current);
+    int len = qMax(l.size(), c.size());
+    while (l.size() < len) l.append(0);
+    while (c.size() < len) c.append(0);
+    for (int i = 0; i < len; ++i) {
+        if (l[i] > c[i]) return true;
+        if (l[i] < c[i]) return false;
+    }
+    return false;
+}
+
+void ncmdumpGUIwithoutgo::onCheckUpdate()
+{
+    QDialog* dlg = new QDialog(this);
+    dlg->setWindowTitle("更新");
+    dlg->setWindowFlags(dlg->windowFlags() & ~Qt::WindowContextHelpButtonHint);
+    dlg->setFixedSize(420, 520);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+
+    QVBoxLayout* layout = new QVBoxLayout(dlg);
+    layout->setSpacing(8);
+    layout->setContentsMargins(40, 24, 40, 24);
+
+    QLabel* iconLabel = new QLabel(dlg);
+    QIcon icon(":/icons/NCMC.ico");
+    iconLabel->setPixmap(icon.pixmap(120, 120));
+    iconLabel->setAlignment(Qt::AlignCenter);
+    layout->addWidget(iconLabel);
+
+    QLabel* titleLabel = new QLabel("NCM Converter", dlg);
+    QFont titleFont = titleLabel->font();
+    titleFont.setPointSize(18);
+    titleFont.setBold(true);
+    titleLabel->setFont(titleFont);
+    titleLabel->setAlignment(Qt::AlignCenter);
+    layout->addWidget(titleLabel);
+
+    QLabel* versionLabel = new QLabel("当前版本: " NCM_CONVERTER_VERSION, dlg);
+    versionLabel->setAlignment(Qt::AlignCenter);
+    layout->addWidget(versionLabel);
+
+    QLabel* infoLabel = new QLabel(dlg);
+    infoLabel->setAlignment(Qt::AlignCenter);
+    infoLabel->setWordWrap(true);
+    infoLabel->hide();
+    layout->addWidget(infoLabel);
+
+    layout->addSpacing(8);
+
+    QPushButton* downloadBtn = new QPushButton("下载更新", dlg);
+    downloadBtn->setMinimumWidth(140);
+    downloadBtn->hide();
+    downloadBtn->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; border-radius: 4px; padding: 8px 16px; } QPushButton:hover { background-color: #45a049; }");
+    layout->addWidget(downloadBtn, 0, Qt::AlignCenter);
+    layout->addSpacing(4);
+
+    QPushButton* checkBtn = new QPushButton("检查更新", dlg);
+    checkBtn->setMinimumWidth(140);
+    layout->addWidget(checkBtn, 0, Qt::AlignCenter);
+    layout->addSpacing(4);
+
+    QProgressBar* progBar = new QProgressBar(dlg);
+    progBar->setRange(0, 100);
+    progBar->setValue(0);
+    progBar->setTextVisible(false);
+    layout->addWidget(progBar);
+
+    layout->addStretch();
+    layout->addStretch();
+    layout->addStretch();
+    layout->addStretch();
+
+    connect(checkBtn, &QPushButton::clicked, dlg, [this, dlg, versionLabel, infoLabel, checkBtn, downloadBtn, progBar]() {
+        infoLabel->hide();
+        infoLabel->setText("");
+        progBar->setRange(0, 0);  // 不确定模式
+        progBar->setValue(0);
+        checkBtn->setEnabled(false);
+
+        QString iniPath = QCoreApplication::applicationDirPath() + "/settings.ini";
+        QSettings settings(iniPath, QSettings::IniFormat);
+        QString wayUrl = settings.value("WayURL", "https://cdn.zhb1323306.qzz.io/way_ncmconverter.json").toString();
+
+        appendLog("正在获取更新服务器地址...");
+
+        if (!networkManager) {
+            networkManager = new QNetworkAccessManager(this);
+            // Win7 上禁用代理检测，避免 WinHTTP WPAD 卡 20 秒
+            if (QSysInfo::productVersion() == QStringLiteral("7"))
+                networkManager->setProxy(QNetworkProxy::NoProxy);
+        }
+        QNetworkRequest req{ QUrl(wayUrl) };
+        req.setHeader(QNetworkRequest::UserAgentHeader, "NCMC/" NCM_CONVERTER_VERSION);
+        req.setTransferTimeout(10000);
+        QNetworkReply* wayReply = networkManager->get(req);
+
+        connect(wayReply, &QNetworkReply::finished, dlg, [this, dlg, wayReply, versionLabel, infoLabel, checkBtn, downloadBtn, progBar, iniPath]() {
+            wayReply->deleteLater();
+
+            QString fullUrl;
+
+            bool gotFromWay = false;
+            if (wayReply->error() == QNetworkReply::NoError) {
+                QJsonParseError err;
+                QJsonDocument doc = QJsonDocument::fromJson(wayReply->readAll(), &err);
+                if (err.error == QJsonParseError::NoError) {
+                    QString updateServer = doc.object()["update_server"].toString();
+                    if (!updateServer.isEmpty()) {
+                        if (!updateServer.startsWith("http"))
+                            updateServer = "https://" + updateServer;
+                        fullUrl = updateServer + "/update.json";
+                        gotFromWay = true;
+                        appendLog("更新服务器: " + updateServer);
+                    }
+                }
+            }
+
+            if (!gotFromWay) {
+                QSettings settings(iniPath, QSettings::IniFormat);
+                fullUrl = settings.value("UpdateURL", "https://cdn.zhb1323306.qzz.io/NCM-Converter/update.json").toString();
+                if (wayReply->error() != QNetworkReply::NoError)
+                    appendLog("无法获取更新服务器地址，使用本地默认地址");
+            }
+
+            appendLog("正在检查更新...");
+            QNetworkRequest req2{ QUrl(fullUrl) };
+            req2.setHeader(QNetworkRequest::UserAgentHeader, "NCMC/" NCM_CONVERTER_VERSION);
+            req2.setTransferTimeout(10000);
+            QNetworkReply* reply = networkManager->get(req2);
+
+            connect(reply, &QNetworkReply::finished, dlg, [this, dlg, reply, versionLabel, infoLabel, checkBtn, downloadBtn, progBar]() {
+                reply->deleteLater();
+                progBar->setRange(0, 100);
+                progBar->setValue(100);
+                checkBtn->setEnabled(true);
+
+                if (reply->error() != QNetworkReply::NoError) {
+                    QString reason = reply->errorString();
+                    appendLog("检查更新失败: " + reason);
+                    infoLabel->setText(QString("检查更新失败了呢\n因为\n%1").arg(reason));
+                    infoLabel->show();
+                    return;
+                }
+
+                QByteArray data = reply->readAll();
+                QJsonParseError err;
+                QJsonDocument doc = QJsonDocument::fromJson(data, &err);
+                if (err.error != QJsonParseError::NoError) {
+                    appendLog("更新信息解析失败: " + err.errorString());
+                    infoLabel->setText(QString("检查更新失败了呢\n因为\n%1").arg(err.errorString()));
+                    infoLabel->show();
+                    return;
+                }
+
+                QJsonObject obj = doc.object();
+                QString latestVersion  = obj["latest_version"].toString();
+                QString downloadUrl    = obj["download_url"].toString();
+                QString releaseDate    = obj["release_date"].toString();
+
+                if (latestVersion.isEmpty()) {
+                    infoLabel->setText("检查更新失败了呢\n因为\n未获取到版本信息");
+                    infoLabel->show();
+                    return;
+                }
+
+                appendLog(QString("服务器版本: %1，当前版本: " NCM_CONVERTER_VERSION).arg(latestVersion));
+
+                if (isNewer(latestVersion, NCM_CONVERTER_VERSION)) {
+                    updateDownloadUrl = downloadUrl;
+                    latestUpdateVersion = latestVersion;
+                    actionVersionInfo->setText(QString("当前版本 " NCM_CONVERTER_VERSION "\n最新版本 %1").arg(latestVersion));
+
+                    infoLabel->setText(QString("更新版本: %1\n\n有更新可用了!\n\n发布日期: %2").arg(latestVersion, releaseDate));
+                    infoLabel->show();
+
+                    downloadBtn->show();
+                    downloadBtn->disconnect();
+                    connect(downloadBtn, &QPushButton::clicked, dlg, [this]() {
+                        if (!updateDownloadUrl.isEmpty())
+                            QDesktopServices::openUrl(QUrl(updateDownloadUrl));
+                    });
+
+                    startFlashTimer();
+                }
+                else {
+                    infoLabel->setText("已经是最新版本了!");
+                    infoLabel->show();
+                    updateDownloadUrl.clear();
+                    downloadBtn->hide();
+                    stopFlashTimer();
+                }
+            });
+        });
+    });
+
+    dlg->exec();
+}
+
+void ncmdumpGUIwithoutgo::doSilentCheckUpdate()
+{
+    QString iniPath = QCoreApplication::applicationDirPath() + "/settings.ini";
+    QSettings settings(iniPath, QSettings::IniFormat);
+
+    if (settings.value("DisableUpdate", false).toBool()) {
+        return;
+    }
+
+    QString wayUrl = settings.value("WayURL", "https://cdn.zhb1323306.qzz.io/way_ncmconverter.json").toString();
+
+    if (!networkManager) {
+        networkManager = new QNetworkAccessManager(this);
+        // Win7 上禁用代理检测，避免 WinHTTP WPAD 卡 20 秒
+        if (QSysInfo::productVersion() == QStringLiteral("7"))
+            networkManager->setProxy(QNetworkProxy::NoProxy);
+    }
+    QNetworkRequest req{ QUrl(wayUrl) };
+    req.setHeader(QNetworkRequest::UserAgentHeader, "NCMC/" NCM_CONVERTER_VERSION);
+    req.setTransferTimeout(10000);
+    QNetworkReply* wayReply = networkManager->get(req);
+
+    connect(wayReply, &QNetworkReply::finished, this, [this, wayReply, iniPath]() {
+        wayReply->deleteLater();
+
+        QString fullUrl;
+
+        bool gotFromWay = false;
+        if (wayReply->error() == QNetworkReply::NoError) {
+            QJsonParseError err;
+            QJsonDocument doc = QJsonDocument::fromJson(wayReply->readAll(), &err);
+            if (err.error == QJsonParseError::NoError) {
+                QString updateServer = doc.object()["update_server"].toString();
+                if (!updateServer.isEmpty()) {
+                    if (!updateServer.startsWith("http"))
+                        updateServer = "https://" + updateServer;
+                    fullUrl = updateServer + "/update.json";
+                    gotFromWay = true;
+                }
+            }
+        }
+
+        if (!gotFromWay) {
+            QSettings settings(iniPath, QSettings::IniFormat);
+            fullUrl = settings.value("UpdateURL", "https://cdn.zhb1323306.qzz.io/NCM-Converter/update.json").toString();
+        }
+
+        if (fullUrl.isEmpty()) return;
+
+        QNetworkRequest req2{ QUrl(fullUrl) };
+        req2.setHeader(QNetworkRequest::UserAgentHeader, "NCMC/" NCM_CONVERTER_VERSION);
+        req2.setTransferTimeout(10000);
+        QNetworkReply* reply = networkManager->get(req2);
+
+        connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+            reply->deleteLater();
+            if (reply->error() != QNetworkReply::NoError) {
+                return;  // 静默模式，不提示错误
+            }
+
+            QByteArray data = reply->readAll();
+            QJsonParseError err;
+            QJsonDocument doc = QJsonDocument::fromJson(data, &err);
+            if (err.error != QJsonParseError::NoError) {
+                return;
+            }
+
+            QJsonObject obj = doc.object();
+            QString latestVersion = obj["latest_version"].toString();
+            QString downloadUrl   = obj["download_url"].toString();
+
+            if (latestVersion.isEmpty()) return;
+
+            if (isNewer(latestVersion, NCM_CONVERTER_VERSION)) {
+                updateDownloadUrl = downloadUrl;
+                latestUpdateVersion = latestVersion;
+                actionVersionInfo->setText(QString("当前版本 " NCM_CONVERTER_VERSION "\n最新版本 %1").arg(latestVersion));
+                startFlashTimer();
+            }
+        });
+    });
+}
+
+void ncmdumpGUIwithoutgo::startFlashTimer()
+{
+    updateBtn->setText("有更新可用");
+
+    QString iniPath = QCoreApplication::applicationDirPath() + "/settings.ini";
+    QSettings settings(iniPath, QSettings::IniFormat);
+    if (settings.value("DisableFlash", false).toBool()) {
+        return;  // 用户禁用了闪烁
+    }
+
+    if (!flashTimer) {
+        flashTimer = new QTimer(this);
+        connect(flashTimer, &QTimer::timeout, this, &ncmdumpGUIwithoutgo::onFlashTimerTick);
+    }
+    flashRed = true;
+    flashTimer->start(1000);  // 每秒切换一次颜色
+}
+
+void ncmdumpGUIwithoutgo::stopFlashTimer()
+{
+    if (flashTimer) {
+        flashTimer->stop();
+    }
+    updateBtn->setText("更新");
+    updateBtn->setStyleSheet("");
+}
+
+void ncmdumpGUIwithoutgo::onFlashTimerTick()
+{
+    flashRed = !flashRed;
+    if (flashRed) {
+        updateBtn->setStyleSheet("color: red; font-weight: bold;");
+    }
+    else {
+        updateBtn->setStyleSheet("color: #FFD700; font-weight: bold;");
+    }
 }

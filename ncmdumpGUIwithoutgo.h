@@ -1,4 +1,22 @@
-﻿#pragma once
+﻿/*
+ * NCM Converter - A GUI tool.
+ * Copyright (C) 2026 ZHB3306
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#pragma once
 
 #include <QtWidgets/QMainWindow>
 #include <QListWidget>
@@ -17,6 +35,12 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QMimeData>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkProxy>
+#include <QTimer>
+
+#define NCM_CONVERTER_VERSION "2.0.0"
 
 typedef void* (__cdecl* CreateCryptFunc)(const char*);
 typedef int(__cdecl* DumpFunc)(void*, const char*);
@@ -33,6 +57,7 @@ public:
     bool initialize();
 
     void addFiles(const QStringList& files);
+    void doSilentCheckUpdate();
 
 protected:
     void dragEnterEvent(QDragEnterEvent* event) override;
@@ -47,7 +72,10 @@ private slots:
     void onConvert();
     void onSettings();
     void onAbout();
+    void onShowLog();
+    void onCheckUpdate();
     void onMp3ConvertFinished(int exitCode, QProcess::ExitStatus exitStatus);
+    void onFlashTimerTick();
 
 private:
     void appendLog(const QString& msg);
@@ -68,6 +96,21 @@ private:
     QMenu* mainMenu;
     QAction* actionSettings;
     QAction* actionAbout;
+    QAction* logAction;
+
+    QPushButton*        updateBtn;
+    QMenu*              updateMenu;
+    QAction*            actionCheckUpdate;
+    QAction*            actionVersionInfo;
+    QNetworkAccessManager* networkManager;
+    QString             updateDownloadUrl;
+
+    QTimer* flashTimer;
+    bool    flashRed;
+    QString latestUpdateVersion;
+
+    void startFlashTimer();
+    void stopFlashTimer();
 
     QLibrary lib;
     CreateCryptFunc   createCrypt = nullptr;
